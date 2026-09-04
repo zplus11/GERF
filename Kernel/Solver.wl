@@ -22,9 +22,9 @@ Options[GERFSolve] = {
 
 GERFSolve[ieqns_List, us : {(_[vars__]) ..}, opts : OptionsPattern[]] :=
 	Module[
-		{w, A, R, U, eta, state}, (* initialise A,R,U,eta here so each trial solution has same instance *)
+		{w, A, R}, (* initialise A,R here so each trial solution has same instance of R *)
 		
-		state = <|
+		$GERFState = <|
 			"OriginalEquation" -> ieqns,
 			"Function" -> AssociationThread[Range @ Length @ ieqns -> Head /@ us],
 			"Variables" -> {vars},
@@ -38,8 +38,8 @@ GERFSolve[ieqns_List, us : {(_[vars__]) ..}, opts : OptionsPattern[]] :=
 			"ODE" -> None,
 			"TrialSolution" -> None,
 			"AuxiliaryPolynomial" -> None,
-			"AuxiliaryFunction" -> AssociationMap[U, Range @ Length @ ieqns],
-			"Eta" -> eta,
+			"AuxiliaryFunction" -> None,
+			"Eta" -> None,
 			"WaveConstant" -> AssociationMap[w, {vars}],
 			"WCH" -> w, (* ad hoc provision *)
 			"BalanceConstant" -> None,
@@ -48,40 +48,40 @@ GERFSolve[ieqns_List, us : {(_[vars__]) ..}, opts : OptionsPattern[]] :=
 		|>;
 		
 		(* standardise the equations *)
-		state["Equation"] = ((# /. Equal -> Subtract) == 0) & /@ ieqns;
+		$GERFState @ "Equation" = ((# /. Equal -> Subtract) == 0) & /@ ieqns;
 		
 		(* Provision for custom wave constants *)
 		If[
-			state["Options"] @ "WaveConstants" =!= Automatic,
-				If[Length[state["Options"] @ "WaveConstants"] != Length[state @ "Variables"],
+			$GERFState["Options"] @ "WaveConstants" =!= Automatic,
+				If[Length[$GERFState["Options"] @ "WaveConstants"] != Length[$GERFState @ "Variables"],
 					Message[GERFSolve::ConstantsLengthMismatch];
 					Throw @ $Failed];
-				state["WaveConstant"] = AssociationThread[
-					state @ "Variables"  -> state["Options"] @ "WaveConstants"]];
+				$GERFState @ "WaveConstant" = AssociationThread[
+					$GERFState @ "Variables"  -> $GERFState["Options"] @ "WaveConstants"]];
 		
 		(* top level *)
 		Catch[
 			(* convert the eqns to ODE using wave transformation and update state: *)
-			state["ODE"] = ReducetoODE[state];
+			$GERFState @ "ODE" = ReducetoODE[];
 			(* calculate balance constant *)
-			state["BalanceConstant"] = AssociationThread[
-				Range @ state["Length"] ->
-				If[state["Options"] @ "BalanceConstant" === Automatic,
-					BalanceConstant[state],
-					state["Options"] @ "BalanceConstant"]];
+			$GERFState @ "BalanceConstant" = AssociationThread[
+				Range @ $GERFState["Length"] ->
+				If[$GERFState["Options"] @ "BalanceConstant" === Automatic,
+					BalanceConstant[],
+					$GERFState["Options"] @ "BalanceConstant"]];
 			(* and validate it *)
 			If[
-				!MatchQ[Values @ state["BalanceConstant"], {_Integer ..}] ||
-					!AllTrue[Values @ state["BalanceConstant"], Positive],
+				!MatchQ[Values @ $GERFState["BalanceConstant"], {_Integer ..}] ||
+					!AllTrue[Values @ $GERFState["BalanceConstant"], Positive],
 				Message[GERFSolve::GERFPackageError, "Valid balance constants could not be calculated. Consider providing the values using \"BalanceConstant\" option."];
 				Throw[$Failed]];
 			(* update state with the trial solutions as functions of wave transform variable, eta *)
-			state["TrialSolution"] = AssociationMap[
-				TrialSolution[#, state]&, Range @ state["Length"]];
+			$GERFState @ "TrialSolution" = AssociationMap[
+				TrialSolution, Range @ $GERFState @ "Length"];
 			(* make the auxiliary polynomial which is to be ultimately solved *)
-			state["AuxiliaryPolynomial"] = AuxiliaryPolynomial[state];
+			$GERFState @ "AuxiliaryPolynomial" = AuxiliaryPolynomial[];
 			(* and finally solve it *)
-			SolveAuxiliaryPolynomial[state]]]
+			SolveAuxiliaryPolynomial[]]]
 
 GERFSolve[eqn_, u_[vars__], opts : OptionsPattern[]] :=
 	GERFSolve[{eqn}, {u[vars]}, opts]
