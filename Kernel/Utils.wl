@@ -32,22 +32,21 @@ NonlinearQ[eqn_, u_[vars__]] :=
 			MatchQ[a, pat] && MatchQ[b, pat]]]
 
 
-GetDegreeofTerm[term_, m_] :=
+GetDegreeofTerm[term_, m_, state_] :=
 	Module[{j, subbed, drules},
 		
 		(* substitute all functions u[k] with K^m[k] *)
 		drules = Flatten @ Table[With[{k = i}, {
-			$GERFState["Function"][k] @@ $GERFState["Variables"] -> Power[j, m[k]],
-			Derivative[orders__][$GERFState["Function"][k]] @@ $GERFState["Variables"] :> Power[j, m[k] + Total[{orders}]],
+			state["Function"][k] @@ state["Variables"] -> Power[j, m[k]],
+			Derivative[orders__][state["Function"][k]] @@ state["Variables"] :> Power[j, m[k] + Total[{orders}]],
 			
-            (* a standard fractional derivative of order alpha transforms 
-               to a first-order ODE derivative, so its degree is m[k] + 1 *)
-			(FractionalD | CaputoD)[$GERFState["Function"][k] @@ $GERFState["Variables"], {_, alpha_}] :> Power[j, m[k] + 1]
-		}], {i, 1, $GERFState["Length"]}];
+			(* a standard fractional derivative of order alpha transforms 
+			   to a first-order ODE derivative, so its degree is m[k] + 1 *)
+			(FractionalD | CaputoD)[state["Function"][k] @@ state["Variables"], {_, alpha_}] :> Power[j, m[k] + 1]
+		}], {i, 1, state["Length"]}];
 		
 		subbed = term /. drules;
-		Simplify[Exponent[subbed, j]]
-    ]
+		Simplify[Exponent[subbed, j]]]
 
 
 FractionalPDEQ[eqn_] := Not @ FreeQ[eqn, FractionalD | CaputoD]
@@ -62,15 +61,15 @@ FractionalOrders[eqn_] :=
 (*For extracting balance constants:*)
 
 
-LinearQ[term_] :=
+LinearQ[term_, state_] :=
 	Module[{j, subbed, lrules},
 		
 		(* Substitute all functions u[k] with K to check for linearity (degree 1) *)
 		lrules = Flatten @ Table[{
-			$GERFState["Function"][k] @@ $GERFState["Variables"] -> j,
-			Derivative[__][$GERFState["Function"][k]] @@ $GERFState["Variables"] :> j,
-			(FractionalD | CaputoD)[$GERFState["Function"][k] @@ $GERFState["Variables"], __] :> j
-		}, {k, 1, $GERFState["Length"]}];
+			state["Function"][k] @@ state["Variables"] -> j,
+			Derivative[__][state["Function"][k]] @@ state["Variables"] :> j,
+			(FractionalD | CaputoD)[state["Function"][k] @@ state["Variables"], __] :> j
+		}, {k, 1, state["Length"]}];
 		
 		subbed = term /. lrules;
 		Simplify[Exponent[subbed, j]] == 1]
@@ -80,7 +79,7 @@ LinearQ[term_] :=
 (*Integrate the equation:*)
 
 
-IntegrateEquation[eqn_] :=
+IntegrateEquation[eqn_, state_] :=
 	Module[
 		{lhs},
 		
@@ -88,7 +87,7 @@ IntegrateEquation[eqn_] :=
 		
 		While[
 			Head @ lhs != Integrate,
-			lhs = Integrate[lhs, $GERFState @ "Eta"]];
+			lhs = Integrate[lhs, state @ "Eta"]];
 		
 		Return[lhs == 0]]
 
@@ -97,19 +96,19 @@ IntegrateEquation[eqn_] :=
 (*Function to extract the balance constant of equation when "BalanceConstant" option is set to Automatic:*)
 
 
-BalanceConstant[] :=
+BalanceConstant[state_] :=
 	Module[
 		{sys = {}, k, m, sols, ld, nld, expr, terms, cand},
 		
-		For[k = 1, k <= $GERFState["Length"], k++,
-			expr = Expand @ If[Head[$GERFState["Equation"][[k]]] === Equal,
-				Subtract @@ $GERFState["Equation"][[k]], 
-				$GERFState["Equation"][[k]]];
+		For[k = 1, k <= state["Length"], k++,
+			expr = Expand @ If[Head[state["Equation"][[k]]] === Equal,
+				Subtract @@ state["Equation"][[k]], 
+				state["Equation"][[k]]];
 			terms = If[Head[expr] === Plus, List @@ expr, {expr}];
 			
 			(* get degrees  *)
-			ld = Simplify[GetDegreeofTerm[#, m] & /@ Select[terms, LinearQ]];
-			nld = Simplify[GetDegreeofTerm[#, m] & /@ Select[terms, Not @* LinearQ]];
+			ld = Simplify[GetDegreeofTerm[#, m, state] & /@ Select[terms, LinearQ[#, state]&]];
+			nld = Simplify[GetDegreeofTerm[#, m, state] & /@ Select[terms, Not @* (LinearQ[#, state]&)]];
 			
 			If[Length[ld] == 0 || Length[nld] == 0,
 				Message[GERFSolve::GERFPackageError, "Balance constant could not be calculated for equation " <> ToString[k] <> "."];
@@ -121,12 +120,12 @@ BalanceConstant[] :=
 					Last[SortBy[nld, # /. {m[_] :> 100, _Symbol :> 1} &]]]];
 		
 		(* solve the simultaneous system for all m[k] *)
-		sols = Solve[sys, Table[m[i], {i, 1, $GERFState["Length"]}]];
+		sols = Solve[sys, Table[m[i], {i, 1, state["Length"]}]];
 		
 		If[Length[sols] > 0,
 			(* and grab the largest solution *)
 			cand = TakeLargestBy[sols, Length, 1][[1]];
-			If[Length[cand] == $GERFState["Length"],
+			If[Length[cand] == state["Length"],
 				Last /@ cand,
 				Message[GERFSolve::GERFPackageError, "No valid balance constants found for the system."];
 				Throw[$Failed] (* to top level *)]]]
@@ -136,95 +135,92 @@ BalanceConstant[] :=
 (*Reducing the PDE to ODE:*)
 
 
-ReducetoODE[] :=
+ReducetoODE[state_] :=
 	Module[
-		{dr, U, eta, interim},
-		
-		$GERFState @ "AuxiliaryFunction" = AssociationMap[U, Range @ $GERFState @ "Length"];
-		$GERFState @ "Eta" = eta;
+		{dr, interim},
 		
 		(* applying the derivative rule given as: *)
 			dr = Flatten @ Table[
-				With[{k = i}, {(FractionalD | CaputoD)[$GERFState["Function"][k]@@$GERFState["Variables"], {var_, alpha_}] :>
-					$GERFState["WaveConstant"] @ var * Derivative[1][U[k]][eta],
+				With[{k = i}, {(FractionalD | CaputoD)[state["Function"][k]@@state["Variables"], {var_, alpha_}] :>
+					state["WaveConstant"] @ var * Derivative[1][state["AuxiliaryFunction"][k]][state["Eta"]],
 					(* only one FractionalD at a time please *)
 					(* D^alpha u_x = x^(1-alpha) U'(eta) deta/dx
 						= x^(1-alpha) U'(eta) a x^(alpha-1)
 						= a U'(eta) *)
-					Derivative[orders__][$GERFState["Function"][k]]@@$GERFState["Variables"] :>
-						Times @@ Power[$GERFState["WaveConstant"] /@ $GERFState["Variables"], {orders}] *
-							Derivative[Total[{orders}]][U[k]][eta]}],
+					Derivative[orders__][state["Function"][k]]@@state["Variables"] :>
+						Times @@ Power[state["WaveConstant"] /@ state["Variables"], {orders}] *
+							Derivative[Total[{orders}]][state["AuxiliaryFunction"][k]][state["Eta"]]}],
 					(* simply using this rule, for example u_x converts into 
 						a*U', or u_xxy -> a^2bU''', and so on *)
-					{i, 1, $GERFState @ "Length"}];
+					{i, 1, state @ "Length"}];
 		(* to the equation and return *)
-			interim = $GERFState["Equation"] /. dr /. Table[With[{k = i},
-				$GERFState["Function"][k]@@$GERFState["Variables"] :> U[k][eta]],
-				{i, 1, $GERFState @ "Length"}];
+			interim = state["Equation"] /. dr /. Table[With[{k = i},
+				state["Function"][k]@@state["Variables"] :> state["AuxiliaryFunction"][k][state["Eta"]]],
+				{i, 1, state @ "Length"}];
 			
-			IntegrateEquation /@ interim]
+			IntegrateEquation[#, state] & /@ interim]
 
 
 (* ::Text:: *)
 (*Constructing the ansatz for Subscript[U, k]:*)
 
 
-TrialSolution[k_] :=
+TrialSolution[k_, state_] :=
 	Module[
 		{A, R, eta},
 		
-		A = $GERFState @ "TrialSolutionCoefficient";
-		R = $GERFState @ "SymbolicRationalHead";
+		A = state @ "TrialSolutionCoefficient";
+		R = state @ "SymbolicRationalHead";
 		
 		(* a function of eta *)
-		eta = $GERFState @ "Eta";
+		eta = state @ "Eta";
 		Return @ Function[
 			eta,
 			Sum[
-				A[i, k] R[eta]^i, 
-				{i, -$GERFState["BalanceConstant"] @ k, $GERFState["BalanceConstant"] @ k}]]]
+				A[i, state["Function"][k]] R[eta]^i, 
+				{i, -state["BalanceConstant"] @ k, state["BalanceConstant"] @ k}]]]
 
 
 (* ::Text:: *)
 (*Construct the auxiliary polynomials:*)
 
 
-AuxiliaryPolynomial[] :=
+AuxiliaryPolynomial[state_] :=
 	ExpandAll[
-		ReplaceAll[$GERFState @ "ODE",
+		ReplaceAll[state @ "ODE",
 			Table[With[{k = i},
-			$GERFState["AuxiliaryFunction"][k] :> $GERFState["TrialSolution"][k]],
-			{i, 1, $GERFState @ "Length"}]]]
+			state["AuxiliaryFunction"][k] :> state["TrialSolution"][k]],
+			{i, 1, state @ "Length"}]]]
 
 
 (* ::Text:: *)
 (*Algebraic system solver*)
 
 
-SolveAuxiliaryPolynomial[] :=
+SolveAuxiliaryPolynomial[state_] :=
 	Module[
 		{tosolve, sys, u, v, sols, vars, forms, pairs},
 
 		tosolve = ReplaceAll[
-			$GERFState["AuxiliaryPolynomial"],
-			$GERFState["SymbolicRationalHead"] ->
-				$GERFState["Options"]["RationalFunction"]];
+			state["AuxiliaryPolynomial"],
+			state["SymbolicRationalHead"] ->
+				state["Options"]["RationalFunction"]];
 
 		sys = Thread[
 			CoefficientList[
 				Expand @ Numerator @ Together @ TrigToExp @
 					(First /@ tosolve) /. {
-						Exp[d_. * $GERFState["Eta"]] :>
+						Exp[d_. * state["Eta"]] :>
 							u^Re[d] v^Im[d],
-						$GERFState["Eta"] :> u},
+						state["Eta"] :> u},
 				{u, v}] == 0];
 
 		vars = Flatten @ Table[
-			$GERFState["TrialSolutionCoefficient"][i, k],
-			{k, $GERFState["Length"]},
+			state["TrialSolutionCoefficient"][i, k],
+			{k, state["Length"]},
 			{i,
-				-$GERFState["BalanceConstant"][k],
-				 $GERFState["BalanceConstant"][k]}];
+				-state["BalanceConstant"][k],
+				 state["BalanceConstant"][k]}];
 
 		sols = Select[
 			Solve @ Reduce[sys, vars],
@@ -232,16 +228,16 @@ SolveAuxiliaryPolynomial[] :=
 
 		forms = Table[
 			Table[
-				$GERFState["TrialSolution"][k][FormWaveTransformation[]],
-				{k, $GERFState["Length"]}] /.
-					$GERFState["SymbolicRationalHead"] ->
-						$GERFState["Options"]["RationalFunction"] /.
+				state["TrialSolution"][k][FormWaveTransformation[state]],
+				{k, state["Length"]}] /.
+					state["SymbolicRationalHead"] ->
+						state["Options"]["RationalFunction"] /.
 							sol,
 				{sol, sols}];
 
 		pairs = Select[
 			Transpose[{sols, forms}],
-				!FreeQ[Last[#], Alternatives @@ $GERFState["Variables"]] &&
+				!FreeQ[Last[#], Alternatives @@ state["Variables"]] &&
 				FreeQ[Last[#],
 					Indeterminate | ComplexInfinity |
 					Infinity | DirectedInfinity] &];
@@ -253,32 +249,31 @@ SolveAuxiliaryPolynomial[] :=
 		pairs = MapThread[{#1,
 				Thread[
 					Through[
-						($GERFState["Function"] /@
-							Range[$GERFState["Length"]]) @@
-							$GERFState["Variables"]
+						(state["Function"] /@
+							Range[state["Length"]]) @@
+							state["Variables"]
 					] -> #2]} &,
 			{sols, forms}];
 
 		Throw @ CleanSymbols[
 			Switch[
-				$GERFState["Options"]["OutputMode"],
+				state["Options"]["OutputMode"],
 				"SolutionSets", First /@ pairs,
 				All, Transpose[{First /@ pairs, Last /@ pairs}],
 				_, Last /@ pairs],
-			$GERFState["TrialSolutionCoefficient"],
-			$GERFState["WCH"]]]
+			state]]
 
 
 (* ::Text:: *)
 (*Make solution forms*)
 
 
-FormWaveTransformation[] :=
+FormWaveTransformation[state_] :=
 	Module[
 		{raw, fds, defaulters},
 		
 		(* all cases of fractional orders: *)
-		raw = DeleteDuplicates @ Cases[$GERFState @ "Equation",
+		raw = DeleteDuplicates @ Cases[state @ "Equation",
 			(CaputoD | FractionalD)[_, {x_, alpha_}] :> (x -> alpha), 
 			Infinity];
 		
@@ -293,15 +288,18 @@ FormWaveTransformation[] :=
 		
 		(* finally, when all is well, we now formulate the transformation *)
 		fds = Association[raw];
-		Sum[$GERFState["WaveConstant"][k] * k^fds[k] / fds[k] , {k, Keys @ fds}] +
-			Sum[$GERFState["WaveConstant"][k] * k, {k, Complement[$GERFState @ "Variables", Keys @ fds]}]]
+		Sum[state["WaveConstant"][k] * k^fds[k] / fds[k] , {k, Keys @ fds}] +
+			Sum[state["WaveConstant"][k] * k, {k, Complement[state @ "Variables", Keys @ fds]}]]
 
 
-CleanSymbols[expr_, A_, w_] :=
+CleanSymbols[expr_, state_] :=
 	Module[
-		{\[ScriptCapitalA], \[ScriptW]},
+		{\[ScriptCapitalA], \[ScriptW], A, w},
+		A = state["TrialSolutionCoefficient"];
+		w = state["WCH"];
+		
 		expr /. {A[n_, k_] :> 
-			If[$GERFState["Length"] == 1, Subscript[\[ScriptCapitalA], n], Subsuperscript[\[ScriptCapitalA], n, k]],
+			If[state["Length"] == 1, Subscript[\[ScriptCapitalA], n], Subsuperscript[\[ScriptCapitalA], n, k]],
 			w[x_] :> Subscript[\[ScriptW], x]} /.
 			sym_Symbol /; StringMatchQ[Context[sym], "*Private*"] :> 
 				Symbol[StringSplit[SymbolName[sym], "$"][[1]]]]
