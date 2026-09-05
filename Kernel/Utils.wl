@@ -220,7 +220,7 @@ SolveAuxiliaryPolynomial[state_] :=
 			Switch[
 				state["Options"]["OutputMode"],
 				"SolutionSets", First /@ pairs,
-				All, Transpose[{First /@ pairs, Last /@ pairs}],
+				All | Full, Transpose[{First /@ pairs, Last /@ pairs}],
 				_, Last /@ pairs],
 			state]]
 
