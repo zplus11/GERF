@@ -44,22 +44,30 @@ Pick any of these and plot it for appropriate values:
 Plot3D[
     u[x, t] /. sol[[3]] /. {(* parameters *)},
     {x, -4, 4}, {t, 0, 4},
-    PlotRange -> All
-]
+    PlotRange -> All]
 ```
 ![Graph](img/plot.png)
+
+Furthermore, just the balance constant of an equation can be computed. For example:
+
+```mathematica
+BalanceConstant[burgers, u[x, t]]
+(* 1 *)
+```
 
 A full demonstration is available on the Wolfram repository page of this paclet, see [GERFSolve.html](https://resources.wolframcloud.com/PacletRepository/resources/Taggar/GERF/ref/GERFSolve.html).
 
 # Version log
 
-**Version 1.0.0,** *on 31 March, 2026* &mdash; initial upload.
+**Version 1.3.0,** *05 September, 2026* &mdash; some code refactoring and introducing `BalanceConstant` in the public API.
 
-**Version 1.1.0,** *on 30 May, 2026* &mdash; support for fractional ordered equations.
+**Version 1.2.1,** *24 June, 2026* &mdash; additional examples added in documentation, and citation information also added.
 
 **Version 1.2.0,** *15 June, 2026* &mdash; support for systems of equations.
 
-**Version 1.2.1,** *24 June, 2026* &mdash; additional examples added in documentation, and citation information also added.
+**Version 1.1.0,** *on 30 May, 2026* &mdash; support for fractional ordered equations.
+
+**Version 1.0.0,** *on 31 March, 2026* &mdash; initial upload.
 
 # Contributions
 
