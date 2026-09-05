@@ -32,18 +32,18 @@ NonlinearQ[eqn_, u_[vars__]] :=
 			MatchQ[a, pat] && MatchQ[b, pat]]]
 
 
-GetDegreeofTerm[term_, m_, state_] :=
+GetDegreeofTerm[term_, m_, funcs_, vars_] :=
 	Module[{j, subbed, drules},
 		
 		(* substitute all functions u[k] with K^m[k] *)
 		drules = Flatten @ Table[With[{k = i}, {
-			state["Function"][k] @@ state["Variables"] -> Power[j, m[k]],
-			Derivative[orders__][state["Function"][k]] @@ state["Variables"] :> Power[j, m[k] + Total[{orders}]],
+			funcs[[k]] @@ vars -> Power[j, m[k]],
+			Derivative[orders__][funcs[[k]]] @@ vars :> Power[j, m[k] + Total[{orders}]],
 			
 			(* a standard fractional derivative of order alpha transforms 
 			   to a first-order ODE derivative, so its degree is m[k] + 1 *)
-			(FractionalD | CaputoD)[state["Function"][k] @@ state["Variables"], {_, alpha_}] :> Power[j, m[k] + 1]
-		}], {i, 1, state["Length"]}];
+			(FractionalD | CaputoD)[funcs[[k]] @@ vars, {_, alpha_}] :> Power[j, m[k] + 1]
+		}], {i, 1, Length[funcs]}];
 		
 		subbed = term /. drules;
 		Simplify[Exponent[subbed, j]]]
@@ -61,15 +61,15 @@ FractionalOrders[eqn_] :=
 (*For extracting balance constants:*)
 
 
-LinearQ[term_, state_] :=
+LinearQ[term_, funcs_, vars_] :=
 	Module[{j, subbed, lrules},
 		
 		(* Substitute all functions u[k] with K to check for linearity (degree 1) *)
 		lrules = Flatten @ Table[{
-			state["Function"][k] @@ state["Variables"] -> j,
-			Derivative[__][state["Function"][k]] @@ state["Variables"] :> j,
-			(FractionalD | CaputoD)[state["Function"][k] @@ state["Variables"], __] :> j
-		}, {k, 1, state["Length"]}];
+			funcs[[k]] @@ vars -> j,
+			Derivative[__][funcs[[k]]] @@ vars :> j,
+			(FractionalD | CaputoD)[funcs[[k]] @@ vars, __] :> j
+		}, {k, 1, Length[funcs]}];
 		
 		subbed = term /. lrules;
 		Simplify[Exponent[subbed, j]] == 1]
@@ -90,45 +90,6 @@ IntegrateEquation[eqn_, state_] :=
 			lhs = Integrate[lhs, state @ "Eta"]];
 		
 		Return[lhs == 0]]
-
-
-(* ::Text:: *)
-(*Function to extract the balance constant of equation when "BalanceConstant" option is set to Automatic:*)
-
-
-BalanceConstant[state_] :=
-	Module[
-		{sys = {}, k, m, sols, ld, nld, expr, terms, cand},
-		
-		For[k = 1, k <= state["Length"], k++,
-			expr = Expand @ If[Head[state["Equation"][[k]]] === Equal,
-				Subtract @@ state["Equation"][[k]], 
-				state["Equation"][[k]]];
-			terms = If[Head[expr] === Plus, List @@ expr, {expr}];
-			
-			(* get degrees  *)
-			ld = Simplify[GetDegreeofTerm[#, m, state] & /@ Select[terms, LinearQ[#, state]&]];
-			nld = Simplify[GetDegreeofTerm[#, m, state] & /@ Select[terms, Not @* (LinearQ[#, state]&)]];
-			
-			If[Length[ld] == 0 || Length[nld] == 0,
-				Message[GERFSolve::GERFPackageError, "Balance constant could not be calculated for equation " <> ToString[k] <> "."];
-				Throw[$Failed] (* to top level *)];
-
-			AppendTo[
-				sys, 
-				Last[SortBy[ld, # /. {m[_] :> 100, _Symbol :> 1} &]] ==
-					Last[SortBy[nld, # /. {m[_] :> 100, _Symbol :> 1} &]]]];
-		
-		(* solve the simultaneous system for all m[k] *)
-		sols = Solve[sys, Table[m[i], {i, 1, state["Length"]}]];
-		
-		If[Length[sols] > 0,
-			(* and grab the largest solution *)
-			cand = TakeLargestBy[sols, Length, 1][[1]];
-			If[Length[cand] == state["Length"],
-				Last /@ cand,
-				Message[GERFSolve::GERFPackageError, "No valid balance constants found for the system."];
-				Throw[$Failed] (* to top level *)]]]
 
 
 (* ::Text:: *)
@@ -259,7 +220,7 @@ SolveAuxiliaryPolynomial[state_] :=
 			Switch[
 				state["Options"]["OutputMode"],
 				"SolutionSets", First /@ pairs,
-				All, Transpose[{First /@ pairs, Last /@ pairs}],
+				All | Full, Transpose[{First /@ pairs, Last /@ pairs}],
 				_, Last /@ pairs],
 			state]]
 
