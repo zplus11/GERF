@@ -177,7 +177,7 @@ TrialSolution[k_, state_] :=
 		Return @ Function[
 			eta,
 			Sum[
-				A[i, state["Function"][k]] R[eta]^i, 
+				A[i, k] R[eta]^i, 
 				{i, -state["BalanceConstant"] @ k, state["BalanceConstant"] @ k}]]]
 
 
@@ -299,7 +299,7 @@ CleanSymbols[expr_, state_] :=
 		w = state["WCH"];
 		
 		expr /. {A[n_, k_] :> 
-			If[state["Length"] == 1, Subscript[\[ScriptCapitalA], n], Subsuperscript[\[ScriptCapitalA], n, k]],
+			If[state["Length"] == 1, Subscript[\[ScriptCapitalA], n], Subsuperscript[\[ScriptCapitalA], n, state["Function"][k]]],
 			w[x_] :> Subscript[\[ScriptW], x]} /.
 			sym_Symbol /; StringMatchQ[Context[sym], "*Private*"] :> 
 				Symbol[StringSplit[SymbolName[sym], "$"][[1]]]]

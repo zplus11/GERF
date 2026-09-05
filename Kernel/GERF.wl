@@ -35,6 +35,7 @@ Get /@ {
 
 GERFSolve::GERFPackageError = "`1`";
 GERFSolve::InvalidFractionalDerivatives = "Multiple fractional orders received for these dimensions: `1`. This is not allowed.";
+GERFSolve::ConstantsLengthMismatch = "The number of wave constants provided in the \"WaveConstants\" option does not match the number of independent variables in the equation(s).";
 
 
 (* ::Section::Closed:: *)
