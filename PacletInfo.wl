@@ -7,7 +7,7 @@ PacletObject[
     "Creator" -> "Naman T.",
     "License" -> "MIT",
     "PublisherID" -> "Taggar",
-    "Version" -> "1.2.1",
+    "Version" -> "1.3.0",
     "WolframVersion" -> "14.3+",
     "PrimaryContext" -> "Taggar`GERF`",
     "DocumentationURL" -> "https://resources.wolframcloud.com/PacletRepository/resources",
@@ -16,7 +16,7 @@ PacletObject[
         "Kernel",
         "Root" -> "Kernel",
         "Context" -> {"Taggar`GERF`"},
-        "Symbols" -> {"Taggar`GERF`GERFSolve"}
+        "Symbols" -> {"Taggar`GERF`GERFSolve", "Taggar`GERF`BalanceConstant"}
       },
       {
         "Documentation",

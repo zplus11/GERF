@@ -55,7 +55,7 @@ BalanceConstant[burgers, u[x, t]]
 (* 1 *)
 ```
 
-A full demonstration is available on the Wolfram repository page of this paclet, see [GERFSolve.html](https://resources.wolframcloud.com/PacletRepository/resources/Taggar/GERF/ref/GERFSolve.html).
+A full demonstration is available on the Wolfram repository page of this paclet, see [GERF](https://resources.wolframcloud.com/PacletRepository/resources/Taggar/GERF).
 
 # Version log
 
